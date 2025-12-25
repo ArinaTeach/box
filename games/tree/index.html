@@ -1,1 +1,393 @@
 
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Animal Tree Lights</title>
+
+<style>
+  :root{
+    --bg:#ffffff;
+    --ink:#0b1b3a;              /* тёмно-синий для снежинок */
+    --bulbOff: rgba(0,0,0,.08);
+    --bulbBorder: rgba(0,0,0,.12);
+  }
+
+  *{ box-sizing:border-box; font-family:system-ui,-apple-system,"Segoe UI",sans-serif; }
+
+  body{
+    margin:0;
+    min-height:100vh;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    background: var(--bg);
+    overflow:hidden;
+    color:#111;
+  }
+
+  /* ❄️ НАСТОЯЩИЕ СНЕЖИНКИ (символы), хаотично по всему экрану */
+  .snow{
+    position:fixed;
+    inset:0;
+    pointer-events:none;
+    z-index:1;
+    overflow:hidden;
+  }
+  .flake{
+    position:absolute;
+    top:-60px;
+    left:0;
+    color: rgba(11,27,58,.55);
+    user-select:none;
+    pointer-events:none;
+    text-shadow: 0 0 6px rgba(11,27,58,.15);
+    will-change: transform, opacity;
+    animation-name: fall, drift;
+    animation-timing-function: linear, ease-in-out;
+    animation-iteration-count: infinite, infinite;
+  }
+  @keyframes fall{
+    from{ transform: translateY(-80px); }
+    to  { transform: translateY(calc(100vh + 120px)); }
+  }
+  @keyframes drift{
+    0%{ margin-left:0; }
+    50%{ margin-left:30px; }
+    100%{ margin-left:0; }
+  }
+
+  /* фиксируем "сцену", чтобы ничего не прыгало */
+  .scene{
+    width:min(900px, 96vw);
+    height:min(900px, 92vh);
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:flex-start;
+    padding-top:16px;
+    position:relative;
+    z-index:2; /* поверх снежинок */
+  }
+
+  /* Ёлка */
+  .treeArea{
+    width:min(720px, 96vw);
+    height:min(720px, 72vh);
+    position:relative;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+  }
+
+  .tree{
+    position:relative;
+    width:min(620px, 92vw);
+    height:100%;
+  }
+
+  .treeImg{
+    position:absolute;
+    inset:0;
+    width:100%;
+    height:100%;
+    object-fit:contain;
+    pointer-events:none;
+    user-select:none;
+  }
+
+  /* ⭐ ЗВЕЗДА (появится после всех лампочек) */
+  .star{
+    position:absolute;
+    top: 3%;
+    left: 50%;
+    transform: translate(-40%, -50%) scale(.7); /* смещение + уменьшение на старте */
+    width:72px;
+    height:72px;
+    opacity:0;
+    pointer-events:none;
+    filter:
+      drop-shadow(0 0 10px rgba(255,215,100,.6))
+      drop-shadow(0 0 22px rgba(255,215,100,.45));
+    transition: opacity .25s ease, transform .25s ease;
+  }
+  .star.show{
+    opacity:1;
+    transform: translate(-52%, -50%) scale(1);
+    animation: starPop .55s ease-out both;
+  }
+  @keyframes starPop{
+    0%{ transform: translate(-52%, -50%) scale(.65); }
+    70%{ transform: translate(-52%, -50%) scale(1.08); }
+    100%{ transform: translate(-52%, -50%) scale(1); }
+  }
+
+  /* Шарики */
+  .bulb{
+    position:absolute;
+    width:26px;
+    height:26px;
+    border-radius:50%;
+    background: var(--bulbOff);
+    border: 1px solid var(--bulbBorder);
+    cursor:pointer;
+    transition: transform .08s ease, filter .12s ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .bulb:hover{ transform: scale(1.10); }
+  .bulb:active{ transform: scale(1.06); }
+
+  .bulb.on{
+    background: radial-gradient(circle at 30% 30%, rgba(255,255,255,.98), var(--glow));
+    border-color: rgba(255,255,255,.65);
+    box-shadow:
+      0 0 14px var(--glow),
+      0 0 34px var(--glow),
+      0 0 70px var(--glow);
+    filter: saturate(1.25);
+  }
+
+  /* Зверюшка под ёлкой — без рамки, без фона */
+  .preview{
+    width:min(260px, 70vw);
+    height:210px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    margin-top:-37px;
+    position:relative;
+  }
+  .preview img{
+    width:190px;
+    height:190px;
+    object-fit:contain;
+    display:none;
+    user-select:none;
+    pointer-events:none;
+  }
+  .preview img.show{ display:block; }
+
+  /* подсказка */
+  .tip{
+    font-size:16px;
+    opacity:.55;
+    text-align:center;
+    position:relative;
+    top:-45px;
+    margin:0;
+    line-height:1.35;
+  }
+  .tip.hidden{ display:none; }
+
+  @media (max-width:520px){
+    .treeArea{ height:min(700px, 70vh); }
+    .preview{ height:190px; }
+    .preview img{ width:170px; height:170px; }
+  }
+</style>
+</head>
+
+<body>
+  <div class="snow" id="snow"></div>
+
+  <div class="scene">
+    <div class="treeArea">
+      <div class="tree" id="tree">
+        <img class="treeImg" src="tree.png" alt="tree">
+        <img src="star.png" class="star" id="star" alt="">
+        <!-- bulbs inserted by JS -->
+      </div>
+    </div>
+
+    <div class="preview">
+      <img id="animalImg" alt="animal">
+    </div>
+
+    <div class="tip" id="tip">
+      Наша ёлочка грустит — давай её украсим! 🎄<br>
+      Наведи курсор на шарик, опиши животное.<br>
+      Нажми на шарик, чтобы он загорелся.<br>
+      Тебе нужно включить 15 шариков.
+    </div>
+  </div>
+
+<script>
+  // --- Животные (файлы рядом с index.html) ---
+  const ITEMS = [
+    { img: "bird.png" },
+    { img: "cat.png" },
+    { img: "crocodile.png" },
+    { img: "dog.png" },
+    { img: "elephant.png" },
+    { img: "fish.png" },
+    { img: "rabbit.png" },   // если нет rabbit.png — поменяй на frog.png
+    { img: "giraffe.png" },
+    { img: "hippo.png" },
+    { img: "horse.png" },
+    { img: "monkey.png" },
+    { img: "mouse.png" },
+    { img: "snake.png" },
+    { img: "tiger.png" },
+    { img: "lion.png" }
+  ];
+
+  // Яркие свечения
+  const GLOWS = ["#4DDCFF","#FF6BD6","#FFE66D","#6BFF9C","#9B7BFF","#FFB86B"];
+
+  // Позиции шариков (ряды подписаны, чтобы не путаться)
+  const POS = [
+    // ⭐ Верхушка (1)
+    {x:50, y:19},
+
+    // 🟢 1-й ряд сверху (3)
+    {x:42, y:28},
+    {x:58, y:28},
+    {x:50, y:30},
+
+    // 🟢 2-й ряд сверху (2) — крайние (ты сдвигала)
+    {x:40, y:44},
+    {x:60, y:44},
+
+    // 🟢 3-й ряд сверху (2)
+    {x:36, y:58},
+    {x:64, y:58},
+
+    // 🟢 центр (2)
+    {x:50, y:49},
+    {x:50, y:61},
+
+    // 🟢 нижний ряд (5)
+    {x:26, y:74},
+    {x:38, y:76},
+    {x:50, y:78},
+    {x:62, y:76},
+    {x:74, y:74}
+  ];
+
+  const tree = document.getElementById("tree");
+  const animalImg = document.getElementById("animalImg");
+  const star = document.getElementById("star");
+  const tip = document.getElementById("tip");
+
+  // Перемешиваем 1 раз при старте
+  const order = [...ITEMS].sort(() => Math.random() - 0.5);
+
+  let currentIndex = null;
+  let touchStage = 0; // 0 = ничего, 1 = показали
+  let tipHidden = false;
+
+  const bulbs = [];
+
+  function hideTipOnce(){
+    if (tipHidden) return;
+    tipHidden = true;
+    if (tip) tip.classList.add("hidden");
+  }
+
+  function showAnimal(i){
+    animalImg.src = order[i].img;
+    animalImg.classList.add("show");
+    currentIndex = i;
+  }
+
+  function hideAnimal(){
+    animalImg.classList.remove("show");
+    animalImg.removeAttribute("src");
+    currentIndex = null;
+    touchStage = 0;
+  }
+
+  function updateStar(){
+    const onCount = bulbs.filter(b => b.classList.contains("on")).length;
+    if (onCount === bulbs.length) star.classList.add("show");
+    else star.classList.remove("show");
+  }
+
+  order.forEach((item, i) => {
+    const p = POS[i];
+    const b = document.createElement("div");
+    b.className = "bulb";
+
+    // 26px шарик => -13px для центровки
+    b.style.left = `calc(${p.x}% - 13px)`;
+    b.style.top  = `calc(${p.y}% - 13px)`;
+    b.style.setProperty("--glow", GLOWS[i % GLOWS.length]);
+
+    // ПК: показ только при наведении
+    b.addEventListener("mouseenter", () => {
+      hideTipOnce();
+      showAnimal(i);
+    });
+    b.addEventListener("mouseleave", () => hideAnimal());
+
+    // Клик/тап:
+    // - На планшете: 1 тап = показать, 2 тап = зажечь и спрятать
+    // - На ПК: клик = зажечь и спрятать
+    b.addEventListener("click", (e) => {
+      e.stopPropagation();
+      hideTipOnce();
+
+      const isTouch = ("ontouchstart" in window);
+
+      if (isTouch){
+        if (currentIndex !== i || touchStage === 0){
+          showAnimal(i);
+          touchStage = 1;
+          return;
+        }
+        if (touchStage === 1){
+          b.classList.toggle("on");
+          hideAnimal();
+          updateStar();
+          return;
+        }
+      } else {
+        b.classList.toggle("on");
+        hideAnimal();
+        updateStar();
+      }
+    });
+
+    bulbs.push(b);
+    tree.appendChild(b);
+  });
+
+  // клик по пустому месту — прячем зверя
+  document.addEventListener("click", () => hideAnimal());
+
+  // ⭐ начальная проверка звезды
+  updateStar();
+
+  // ❄️ Генератор снежинок-символов (хаотично)
+  const snow = document.getElementById("snow");
+  const SNOW_CHARS = ["❄","❅","❆"];
+  const FLAKES = 38;
+
+  function rand(min, max){ return Math.random() * (max - min) + min; }
+
+  function makeFlake(){
+    const f = document.createElement("div");
+    f.className = "flake";
+    f.textContent = SNOW_CHARS[Math.floor(Math.random() * SNOW_CHARS.length)];
+
+    const size = rand(12, 26);
+    const left = rand(0, 100);
+    const dur  = rand(10, 26);
+    const delay = rand(-26, 0);
+    const op   = rand(0.25, 0.7);
+    const driftDur = rand(3.5, 7.5);
+
+    f.style.left = left + "vw";
+    f.style.fontSize = size + "px";
+    f.style.opacity = op;
+    f.style.animationDuration = `${dur}s, ${driftDur}s`;
+    f.style.animationDelay = `${delay}s, 0s`;
+
+    snow.appendChild(f);
+  }
+
+  for(let i=0;i<FLAKES;i++) makeFlake();
+</script>
+</body>
+</html>
